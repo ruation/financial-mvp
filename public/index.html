@@ -5,6 +5,20 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>OctaConsig | Simulador de Empréstimo Consignado</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    /* Shared element that morphs between the selected profile card and the form badge. */
+    ::view-transition-group(profile-emoji) {
+      animation-duration: 350ms;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      ::view-transition-group(*),
+      ::view-transition-old(*),
+      ::view-transition-new(*) {
+        animation: none !important;
+      }
+    }
+  </style>
 </head>
 <body class="bg-slate-50 text-slate-800 min-h-screen">
   <header class="bg-indigo-950 text-white py-5 shadow-md">
@@ -19,74 +33,231 @@
     </div>
   </header>
 
-  <main class="max-w-6xl mx-auto px-4 py-8 grid grid-cols-1 lg:grid-cols-12 gap-8">
-    <section class="lg:col-span-5 bg-white p-6 rounded-xl shadow-sm border border-slate-200 h-fit">
-      <h2 class="text-lg font-bold mb-4 text-slate-900">Dados para Simulação</h2>
-      <form id="simForm" class="space-y-4">
-        <div>
-          <label class="block text-xs font-semibold text-slate-600 mb-1">Nome Completo</label>
-          <input type="text" name="name" required value="Ruan Ferreira" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none" />
-        </div>
-        <div>
-          <label class="block text-xs font-semibold text-slate-600 mb-1">E-mail</label>
-          <input type="email" name="email" required value="cliente@exemplo.com" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none" />
-        </div>
-        <div class="grid grid-cols-2 gap-3">
-          <div>
-            <label class="block text-xs font-semibold text-slate-600 mb-1">CPF</label>
-            <input type="text" name="cpf" required maxlength="14" value="12345678901" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none" />
-          </div>
-          <div>
-            <label class="block text-xs font-semibold text-slate-600 mb-1">CNPJ do Empregador</label>
-            <input type="text" name="employerCnpj" required maxlength="18" value="33000167000101" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none" />
-          </div>
-        </div>
-        <div class="grid grid-cols-3 gap-3">
-          <div>
-            <label class="block text-xs font-semibold text-slate-600 mb-1">Salário (R$)</label>
-            <input type="number" name="monthlyIncome" required step="0.01" value="3500" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none" />
-          </div>
-          <div>
-            <label class="block text-xs font-semibold text-slate-600 mb-1">Valor (R$)</label>
-            <input type="number" name="requestedAmount" required step="100" value="12000" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none" />
-          </div>
-          <div>
-            <label class="block text-xs font-semibold text-slate-600 mb-1">Parcelas (6-84)</label>
-            <input type="number" name="installments" required min="6" max="84" value="48" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none" />
-          </div>
-        </div>
+  <main class="max-w-6xl mx-auto px-4 py-8">
+    <!-- ===================== ETAPA 1: SELEÇÃO DE PERFIL ===================== -->
+    <section id="profileStep" aria-labelledby="profileStepTitle">
+      <div class="text-center mb-8">
+        <p class="text-xs font-semibold uppercase tracking-wider text-indigo-600 mb-1">Etapa 1 de 2</p>
+        <h2 id="profileStepTitle" tabindex="-1" class="text-2xl font-bold text-slate-900 outline-none">Qual é o seu perfil?</h2>
+        <p class="text-sm text-slate-500 mt-2 max-w-xl mx-auto">
+          Cada tipo de vínculo tem um convênio diferente, com documentos, prazos e taxas próprios.
+          Escolha o seu para adaptarmos a simulação.
+        </p>
+      </div>
 
-        <div class="bg-slate-100 p-3.5 rounded-lg text-xs text-slate-600 space-y-1.5 border border-slate-200">
-          <p class="font-bold text-slate-800">Gatilhos para Testar Cenários:</p>
-          <p>• <strong>CNPJ Real (BrasilAPI):</strong> <code>33000167000101</code> (Petrobras) consulta a Receita Federal ao vivo.</p>
-          <p>• <strong>Contraproposta Inteligente:</strong> Digite Valor <code>45000</code> para ver o cálculo reverso de teto por banco.</p>
-          <p>• <strong>CNPJ final 00:</strong> <code>12345678000100</code> simula empresa BAIXADA via Fallback.</p>
-          <p>• <strong>CNPJ final 99:</strong> <code>12345678000199</code> simula Timeout (&gt;2s) no Gama Digital Bank.</p>
-          <p>• <strong>CPF final 0:</strong> <code>12345678910</code> simula queda (Erro 503) no Gama Digital Bank.</p>
-        </div>
-
-        <button type="submit" id="submitBtn" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2.5 rounded-lg transition text-sm shadow-sm">
-          Simular Empréstimo Consignado
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-5 max-w-5xl mx-auto">
+        <button type="button" data-profile="CLT" aria-pressed="false"
+          class="profile-card group text-left bg-white p-6 rounded-xl border-2 border-slate-200 shadow-sm hover:border-indigo-500 hover:shadow-md focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-indigo-300 transition">
+          <span class="profile-emoji inline-block text-4xl" aria-hidden="true">🏢</span>
+          <h3 class="mt-3 text-lg font-bold text-slate-900">Trabalhador CLT</h3>
+          <p class="text-sm text-slate-500">Empregado de empresa privada com carteira assinada.</p>
+          <ul class="mt-4 space-y-1 text-xs text-slate-600">
+            <li>✔ Validação do CNPJ do empregador na Receita</li>
+            <li>✔ Prazo até 84x (varia por banco)</li>
+          </ul>
+          <span class="mt-5 inline-block text-sm font-semibold text-indigo-600 group-hover:translate-x-1 transition">Continuar →</span>
         </button>
-      </form>
+
+        <button type="button" data-profile="INSS" aria-pressed="false"
+          class="profile-card group text-left bg-white p-6 rounded-xl border-2 border-slate-200 shadow-sm hover:border-indigo-500 hover:shadow-md focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-indigo-300 transition">
+          <span class="profile-emoji inline-block text-4xl" aria-hidden="true">👵</span>
+          <h3 class="mt-3 text-lg font-bold text-slate-900">Aposentado ou Pensionista</h3>
+          <p class="text-sm text-slate-500">Beneficiário do INSS (Previdência Social).</p>
+          <ul class="mt-4 space-y-1 text-xs text-slate-600">
+            <li>✔ Basta o Número do Benefício (NB)</li>
+            <li>✔ Taxas limitadas ao teto INSS · até 84x</li>
+          </ul>
+          <span class="mt-5 inline-block text-sm font-semibold text-indigo-600 group-hover:translate-x-1 transition">Continuar →</span>
+        </button>
+
+        <button type="button" data-profile="PUBLIC_SERVANT" aria-pressed="false"
+          class="profile-card group text-left bg-white p-6 rounded-xl border-2 border-slate-200 shadow-sm hover:border-indigo-500 hover:shadow-md focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-indigo-300 transition">
+          <span class="profile-emoji inline-block text-4xl" aria-hidden="true">🏛️</span>
+          <h3 class="mt-3 text-lg font-bold text-slate-900">Servidor Público</h3>
+          <p class="text-sm text-slate-500">Federal, estadual ou municipal.</p>
+          <ul class="mt-4 space-y-1 text-xs text-slate-600">
+            <li>✔ CNPJ do órgão + matrícula funcional</li>
+            <li>✔ As menores taxas da plataforma</li>
+          </ul>
+          <span class="mt-5 inline-block text-sm font-semibold text-indigo-600 group-hover:translate-x-1 transition">Continuar →</span>
+        </button>
+      </div>
     </section>
 
-    <section class="lg:col-span-7 space-y-4">
-      <div id="emptyState" class="bg-white border border-dashed border-slate-300 rounded-xl p-12 text-center text-slate-500">
-        Preencha os parâmetros e clique em <strong>Simular Empréstimo Consignado</strong> para consultar a BrasilAPI e os bancos parceiros simultaneamente.
-      </div>
+    <!-- ===================== ETAPA 2: FORMULÁRIO + RESULTADOS ===================== -->
+    <div id="simulatorStep" class="hidden">
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+        <section class="lg:col-span-5 bg-white p-6 rounded-xl shadow-sm border border-slate-200 h-fit" aria-labelledby="formStepTitle">
+          <p class="text-xs font-semibold uppercase tracking-wider text-indigo-600 mb-1">Etapa 2 de 2</p>
+          <div class="flex items-start justify-between gap-3 mb-4">
+            <h2 id="formStepTitle" tabindex="-1" class="text-lg font-bold text-slate-900 outline-none">Dados para Simulação</h2>
+            <button type="button" id="changeProfileBtn"
+              class="shrink-0 text-xs font-semibold text-indigo-600 hover:text-indigo-800 underline underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 rounded">
+              Alterar perfil
+            </button>
+          </div>
 
-      <div id="errorAlert" class="hidden bg-rose-50 border border-rose-200 text-rose-700 p-4 rounded-xl text-sm font-medium"></div>
+          <div id="profileBadge" class="mb-4 flex items-center gap-3 bg-indigo-50 border border-indigo-200 rounded-lg px-3 py-2">
+            <span id="profileBadgeEmoji" class="inline-block text-2xl" aria-hidden="true"></span>
+            <div>
+              <p class="text-[11px] uppercase font-semibold text-indigo-500">Perfil selecionado</p>
+              <p id="profileBadgeLabel" class="text-sm font-bold text-indigo-950"></p>
+            </div>
+          </div>
 
-      <div id="resultsContainer" class="hidden space-y-4">
-        <div id="employerCard" class="bg-white border border-slate-200 p-4 rounded-xl shadow-sm flex justify-between items-center"></div>
-        <div id="summaryCard" class="bg-indigo-50 border border-indigo-100 p-4 rounded-xl flex justify-between items-center"></div>
-        <div id="banksList" class="space-y-3"></div>
+          <form id="simForm" class="space-y-4">
+            <input type="hidden" name="profile" id="profileInput" />
+
+            <div>
+              <label for="name" class="block text-xs font-semibold text-slate-600 mb-1">Nome Completo</label>
+              <input id="name" type="text" name="name" required autocomplete="name" value="Ruan Ferreira" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none" />
+            </div>
+            <div>
+              <label for="email" class="block text-xs font-semibold text-slate-600 mb-1">E-mail</label>
+              <input id="email" type="email" name="email" required autocomplete="email" value="cliente@exemplo.com" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none" />
+            </div>
+
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label for="cpf" class="block text-xs font-semibold text-slate-600 mb-1">CPF</label>
+                <input id="cpf" type="text" name="cpf" required inputmode="numeric" maxlength="14" value="12345678901" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none" />
+              </div>
+
+              <!-- CLT e Servidor: CNPJ do empregador / órgão -->
+              <div data-profiles="CLT PUBLIC_SERVANT">
+                <label for="employerCnpj" id="cnpjLabel" class="block text-xs font-semibold text-slate-600 mb-1">CNPJ do Empregador</label>
+                <input id="employerCnpj" type="text" name="employerCnpj" required inputmode="numeric" maxlength="18" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none" />
+              </div>
+
+              <!-- INSS: Número do Benefício -->
+              <div data-profiles="INSS">
+                <label for="benefitNumber" class="block text-xs font-semibold text-slate-600 mb-1">Número do Benefício (NB)</label>
+                <input id="benefitNumber" type="text" name="benefitNumber" required inputmode="numeric" maxlength="13" placeholder="10 dígitos" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none" />
+              </div>
+            </div>
+
+            <!-- Servidor: matrícula funcional -->
+            <div data-profiles="PUBLIC_SERVANT">
+              <label for="registrationNumber" class="block text-xs font-semibold text-slate-600 mb-1">Matrícula Funcional</label>
+              <input id="registrationNumber" type="text" name="registrationNumber" required minlength="3" maxlength="20" placeholder="Ex.: 1234567 (SIAPE)" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none" />
+            </div>
+
+            <div data-profiles="INSS" class="text-xs text-slate-600 bg-slate-50 border border-slate-200 rounded-lg p-2.5">
+              🏛️ Fonte pagadora definida automaticamente: <strong>INSS – Instituto Nacional do Seguro Social</strong>. Não é necessário informar CNPJ.
+            </div>
+
+            <div class="grid grid-cols-3 gap-3">
+              <div>
+                <label for="monthlyIncome" id="incomeLabel" class="block text-xs font-semibold text-slate-600 mb-1">Salário (R$)</label>
+                <input id="monthlyIncome" type="number" name="monthlyIncome" required step="0.01" value="3500" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none" />
+              </div>
+              <div>
+                <label for="requestedAmount" class="block text-xs font-semibold text-slate-600 mb-1">Valor (R$)</label>
+                <input id="requestedAmount" type="number" name="requestedAmount" required step="100" value="12000" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none" />
+              </div>
+              <div>
+                <label for="installments" class="block text-xs font-semibold text-slate-600 mb-1">Parcelas (6-84)</label>
+                <input id="installments" type="number" name="installments" required min="6" max="84" value="48" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none" />
+              </div>
+            </div>
+
+            <div class="bg-slate-100 p-3.5 rounded-lg text-xs text-slate-600 space-y-1.5 border border-slate-200">
+              <p class="font-bold text-slate-800">Gatilhos para Testar Cenários:</p>
+              <div id="triggersList" class="space-y-1.5"></div>
+            </div>
+
+            <button type="submit" id="submitBtn" class="w-full bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white font-semibold py-2.5 rounded-lg transition text-sm shadow-sm">
+              Simular Empréstimo Consignado
+            </button>
+          </form>
+        </section>
+
+        <section class="lg:col-span-7 space-y-4" aria-live="polite">
+          <div id="emptyState" class="bg-white border border-dashed border-slate-300 rounded-xl p-12 text-center text-slate-500">
+            Preencha os parâmetros e clique em <strong>Simular Empréstimo Consignado</strong> para validar a fonte pagadora e consultar os bancos parceiros simultaneamente.
+          </div>
+
+          <div id="errorAlert" role="alert" class="hidden bg-rose-50 border border-rose-200 text-rose-700 p-4 rounded-xl text-sm font-medium"></div>
+
+          <div id="resultsContainer" class="hidden space-y-4">
+            <div id="employerCard" class="bg-white border border-slate-200 p-4 rounded-xl shadow-sm flex justify-between items-center"></div>
+            <div id="summaryCard" class="bg-indigo-50 border border-indigo-100 p-4 rounded-xl flex justify-between items-center"></div>
+            <div id="banksList" class="space-y-3"></div>
+          </div>
+        </section>
       </div>
-    </section>
+    </div>
   </main>
 
   <script>
+    // ---------------------------------------------------------------------------
+    // Configuração por perfil
+    // ---------------------------------------------------------------------------
+    const PROFILES = {
+      CLT: {
+        emoji: '🏢',
+        label: 'Trabalhador CLT (Empresa Privada)',
+        cnpjLabel: 'CNPJ do Empregador',
+        incomeLabel: 'Salário (R$)',
+        defaults: { employerCnpj: '33000167000101' },
+        triggers: [
+          '<strong>CNPJ Real (BrasilAPI):</strong> <code>33000167000101</code> (Petrobras) consulta a Receita Federal ao vivo.',
+          '<strong>Contraproposta Inteligente:</strong> Digite Valor <code>45000</code> para ver o cálculo reverso de teto por banco.',
+          '<strong>CNPJ final 00:</strong> <code>12345678000100</code> simula empresa BAIXADA via Fallback.',
+          '<strong>CNPJ final 99:</strong> <code>12345678000199</code> simula Timeout (&gt;2s) no Gama Digital Bank.',
+          '<strong>CPF final 0:</strong> <code>12345678910</code> simula queda (Erro 503) no Gama Digital Bank.',
+        ],
+      },
+      INSS: {
+        emoji: '👵',
+        label: 'Aposentado ou Pensionista (INSS)',
+        incomeLabel: 'Benefício (R$)',
+        defaults: { benefitNumber: '1234567890' },
+        triggers: [
+          '<strong>Fonte pagadora automática:</strong> INSS, sem consulta à BrasilAPI.',
+          '<strong>Convênio por banco:</strong> a Beta Financeira não opera INSS e reprova por política interna.',
+          '<strong>Prazo expandido:</strong> use <code>84</code> parcelas, com taxa limitada ao teto INSS (1,66% a.m.).',
+          '<strong>Contraproposta Inteligente:</strong> Digite Valor <code>45000</code> para ver o teto por banco.',
+          '<strong>NB final 99:</strong> <code>1234567899</code> simula Timeout (&gt;2s) no Gama Digital Bank.',
+          '<strong>CPF final 0:</strong> <code>12345678910</code> simula queda (Erro 503) no Gama Digital Bank.',
+        ],
+      },
+      PUBLIC_SERVANT: {
+        emoji: '🏛️',
+        label: 'Servidor Público',
+        cnpjLabel: 'CNPJ do Órgão Público',
+        incomeLabel: 'Salário (R$)',
+        defaults: { employerCnpj: '00394460000141', registrationNumber: '1234567' },
+        triggers: [
+          '<strong>CNPJ de órgão real (BrasilAPI):</strong> <code>00394460000141</code> consulta a Receita Federal ao vivo.',
+          '<strong>Prazo por banco:</strong> com <code>84</code> parcelas a Beta Financeira reprova (máx. 72x para servidores).',
+          '<strong>CNPJ final 00:</strong> <code>12345678000100</code> simula órgão extinto via Fallback.',
+          '<strong>CNPJ final 99:</strong> <code>12345678000199</code> simula Timeout (&gt;2s) no Gama Digital Bank.',
+          '<strong>CPF final 0:</strong> <code>12345678910</code> simula queda (Erro 503) no Gama Digital Bank.',
+        ],
+      },
+    };
+
+    const SOURCE_TITLES = {
+      PRIVATE_COMPANY: 'Empregador Verificado',
+      SOCIAL_SECURITY: 'Fonte Pagadora (Previdência Social)',
+      PUBLIC_AGENCY: 'Órgão Público Verificado',
+    };
+
+    // ---------------------------------------------------------------------------
+    // Elementos
+    // ---------------------------------------------------------------------------
+    const profileStep = document.getElementById('profileStep');
+    const simulatorStep = document.getElementById('simulatorStep');
+    const profileCards = document.querySelectorAll('.profile-card');
+    const changeProfileBtn = document.getElementById('changeProfileBtn');
+    const profileInput = document.getElementById('profileInput');
+    const profileBadgeEmoji = document.getElementById('profileBadgeEmoji');
+    const profileBadgeLabel = document.getElementById('profileBadgeLabel');
+    const cnpjLabel = document.getElementById('cnpjLabel');
+    const incomeLabel = document.getElementById('incomeLabel');
+    const triggersList = document.getElementById('triggersList');
+
     const form = document.getElementById('simForm');
     const submitBtn = document.getElementById('submitBtn');
     const emptyState = document.getElementById('emptyState');
@@ -99,11 +270,122 @@
     const formatBRL = (val) =>
       new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
 
+    const escapeHtml = (value) =>
+      String(value ?? '').replace(/[&<>"']/g, (ch) => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+      }[ch]));
+
+    // ---------------------------------------------------------------------------
+    // Navegação entre etapas (View Transitions com fallback)
+    // ---------------------------------------------------------------------------
+    let currentProfile = null;
+
+    function runStepTransition(update, focusTarget, cleanup) {
+      if (!document.startViewTransition) {
+        update();
+        cleanup?.();
+        focusTarget?.focus();
+        return;
+      }
+      const transition = document.startViewTransition(update);
+      transition.finished.finally(() => {
+        cleanup?.();
+        focusTarget?.focus();
+      });
+    }
+
+    function cardEmojiFor(profile) {
+      return document.querySelector(`.profile-card[data-profile="${profile}"] .profile-emoji`);
+    }
+
+    function applyProfileToForm(profile) {
+      const config = PROFILES[profile];
+      currentProfile = profile;
+      profileInput.value = profile;
+      profileBadgeEmoji.textContent = config.emoji;
+      profileBadgeLabel.textContent = config.label;
+      incomeLabel.textContent = config.incomeLabel;
+      if (config.cnpjLabel) cnpjLabel.textContent = config.cnpjLabel;
+
+      // Mostra apenas os campos do perfil; campos ocultos ficam desabilitados
+      // para não entrarem no FormData nem na validação nativa do navegador.
+      document.querySelectorAll('[data-profiles]').forEach((group) => {
+        const visible = group.dataset.profiles.split(' ').includes(profile);
+        group.classList.toggle('hidden', !visible);
+        group.querySelectorAll('input').forEach((input) => {
+          input.disabled = !visible;
+        });
+      });
+
+      Object.entries(config.defaults).forEach(([field, value]) => {
+        form.elements[field].value = value;
+      });
+
+      triggersList.innerHTML = config.triggers.map((t) => `<p>• ${t}</p>`).join('');
+
+      profileCards.forEach((card) => {
+        card.setAttribute('aria-pressed', String(card.dataset.profile === profile));
+      });
+
+      resetResults();
+    }
+
+    function resetResults() {
+      errorAlert.classList.add('hidden');
+      resultsContainer.classList.add('hidden');
+      emptyState.classList.remove('hidden');
+    }
+
+    function goToForm(profile) {
+      const cardEmoji = cardEmojiFor(profile);
+      cardEmoji.style.viewTransitionName = 'profile-emoji';
+
+      runStepTransition(
+        () => {
+          cardEmoji.style.viewTransitionName = '';
+          applyProfileToForm(profile);
+          profileStep.classList.add('hidden');
+          simulatorStep.classList.remove('hidden');
+          profileBadgeEmoji.style.viewTransitionName = 'profile-emoji';
+        },
+        document.getElementById('formStepTitle'),
+        () => {
+          profileBadgeEmoji.style.viewTransitionName = '';
+        }
+      );
+    }
+
+    function goToProfileSelection() {
+      const cardEmoji = currentProfile ? cardEmojiFor(currentProfile) : null;
+      profileBadgeEmoji.style.viewTransitionName = 'profile-emoji';
+
+      runStepTransition(
+        () => {
+          profileBadgeEmoji.style.viewTransitionName = '';
+          simulatorStep.classList.add('hidden');
+          profileStep.classList.remove('hidden');
+          if (cardEmoji) cardEmoji.style.viewTransitionName = 'profile-emoji';
+        },
+        document.getElementById('profileStepTitle'),
+        () => {
+          if (cardEmoji) cardEmoji.style.viewTransitionName = '';
+        }
+      );
+    }
+
+    profileCards.forEach((card) => {
+      card.addEventListener('click', () => goToForm(card.dataset.profile));
+    });
+    changeProfileBtn.addEventListener('click', goToProfileSelection);
+
+    // ---------------------------------------------------------------------------
+    // Simulação
+    // ---------------------------------------------------------------------------
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
       errorAlert.classList.add('hidden');
       submitBtn.disabled = true;
-      submitBtn.textContent = 'Consultando BrasilAPI e Bancos...';
+      submitBtn.textContent = currentProfile === 'INSS' ? 'Consultando Bancos...' : 'Consultando BrasilAPI e Bancos...';
 
       const formData = new FormData(form);
       const payload = Object.fromEntries(formData.entries());
@@ -124,30 +406,34 @@
         emptyState.classList.add('hidden');
         resultsContainer.classList.remove('hidden');
 
-        const empStatusBadge = data.employer.isActive
-          ? '<span class="bg-emerald-100 text-emerald-800 text-xs font-bold px-2.5 py-0.5 rounded-full">ATIVA</span>'
+        const employer = data.employer;
+        const isInss = employer.kind === 'SOCIAL_SECURITY';
+        const empStatusBadge = employer.isActive
+          ? `<span class="bg-emerald-100 text-emerald-800 text-xs font-bold px-2.5 py-0.5 rounded-full">${isInss ? 'CONVÊNIO ATIVO' : 'ATIVA'}</span>`
           : '<span class="bg-rose-100 text-rose-800 text-xs font-bold px-2.5 py-0.5 rounded-full">INATIVA / BAIXADA</span>';
 
         employerCard.innerHTML = `
           <div>
-            <p class="text-[11px] text-slate-400 font-semibold uppercase">Empregador Verificado (${data.employer.source})</p>
-            <p class="text-sm font-bold text-slate-800">${data.employer.companyName}</p>
-            <p class="text-xs text-slate-500">CNPJ: ${data.employer.cnpj}</p>
+            <p class="text-[11px] text-slate-400 font-semibold uppercase">${SOURCE_TITLES[employer.kind] ?? 'Fonte Pagadora'} (${escapeHtml(employer.source)})</p>
+            <p class="text-sm font-bold text-slate-800">${escapeHtml(employer.companyName)}</p>
+            <p class="text-xs text-slate-500">CNPJ: ${escapeHtml(employer.cnpj)}</p>
           </div>
           <div class="text-right">
             ${empStatusBadge}
-            <p class="text-[11px] text-slate-400 mt-1">${data.employer.statusDescription}</p>
+            <p class="text-[11px] text-slate-400 mt-1">${escapeHtml(employer.statusDescription)}</p>
           </div>
         `;
 
+        const profileConfig = PROFILES[data.applicant.profile];
         summaryCard.innerHTML = `
           <div>
             <p class="text-xs text-indigo-700 font-semibold uppercase">Margem Consignável Legal (35%)</p>
             <p class="text-xl font-bold text-indigo-950">${formatBRL(data.applicant.maxConsignableMargin)} / mês</p>
           </div>
           <div class="text-right text-xs text-slate-600">
-            <p>Proponente: <strong>${data.applicant.name}</strong></p>
-            <p>CPF: ${data.applicant.maskedCpf}</p>
+            <p>Proponente: <strong>${escapeHtml(data.applicant.name)}</strong></p>
+            <p>CPF: ${escapeHtml(data.applicant.maskedCpf)}</p>
+            <p>Perfil: ${profileConfig ? `${profileConfig.emoji} ${escapeHtml(profileConfig.label)}` : escapeHtml(data.applicant.profile)}</p>
           </div>
         `;
 
@@ -182,7 +468,7 @@
                    </div>`
                 : '';
               detailsHtml = `
-                <p class="mt-2 text-xs text-slate-600 bg-slate-50 p-2.5 rounded-lg border border-slate-200">${bank.reason}</p>
+                <p class="mt-2 text-xs text-slate-600 bg-slate-50 p-2.5 rounded-lg border border-slate-200">${escapeHtml(bank.reason)}</p>
                 ${counterOfferBadge}
               `;
             }
@@ -191,7 +477,7 @@
               <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
                 <div class="flex justify-between items-center">
                   <div>
-                    <h3 class="font-bold text-slate-900 inline">${bank.bankName}</h3>
+                    <h3 class="font-bold text-slate-900 inline">${escapeHtml(bank.bankName)}</h3>
                     ${bestTag}
                     <span class="block text-[11px] text-slate-400">Tempo de resposta: ${bank.responseTimeMs}ms</span>
                   </div>

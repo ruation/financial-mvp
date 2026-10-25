@@ -1,19 +1,44 @@
-export interface SimulationRequest {
+export type ApplicantProfile = 'CLT' | 'INSS' | 'PUBLIC_SERVANT';
+
+interface BaseSimulationRequest {
   name: string;
   email: string;
   cpf: string;
-  employerCnpj: string;
   monthlyIncome: number;
   requestedAmount: number;
   installments: number;
 }
+
+export interface CltSimulationRequest extends BaseSimulationRequest {
+  profile: 'CLT';
+  employerCnpj: string;
+}
+
+export interface InssSimulationRequest extends BaseSimulationRequest {
+  profile: 'INSS';
+  benefitNumber: string;
+}
+
+export interface PublicServantSimulationRequest extends BaseSimulationRequest {
+  profile: 'PUBLIC_SERVANT';
+  employerCnpj: string;
+  registrationNumber: string;
+}
+
+export type SimulationRequest =
+  | CltSimulationRequest
+  | InssSimulationRequest
+  | PublicServantSimulationRequest;
+
+export type PayingSourceKind = 'PRIVATE_COMPANY' | 'SOCIAL_SECURITY' | 'PUBLIC_AGENCY';
 
 export interface EmployerInfo {
   cnpj: string;
   companyName: string;
   isActive: boolean;
   statusDescription: string;
-  source: 'BRASIL_API' | 'FALLBACK';
+  source: 'BRASIL_API' | 'FALLBACK' | 'INSS_REGISTRY';
+  kind: PayingSourceKind;
 }
 
 export interface EvaluationContext {
@@ -40,6 +65,7 @@ export interface ConsolidatedSimulationResponse {
   timestamp: string;
   applicant: {
     name: string;
+    profile: ApplicantProfile;
     maskedCpf: string;
     monthlyIncome: number;
     maxConsignableMargin: number;

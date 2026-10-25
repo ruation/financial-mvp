@@ -1,7 +1,12 @@
 import {
   BankProvider,
+  ProfilePolicies,
+  INSS_MONTHLY_RATE_CAP,
+  PROFILE_LABELS,
   calculatePriceInstallment,
   calculateMaxLoanAmount,
+  formatPercent,
+  getLinkIdentifier,
 } from './bank-provider.interface';
 import { EvaluationContext, BankEvaluationResult } from '../domain/types';
 
@@ -9,8 +14,15 @@ export class BancoGamaProvider implements BankProvider {
   readonly bankId = 'banco-gama';
   readonly bankName = 'Gama Digital Bank';
 
+  private readonly policies: ProfilePolicies = {
+    CLT: { interestRateMonthly: 1.60, marginRate: 0.35, maxInstallments: 84 },
+    INSS: { interestRateMonthly: Math.min(1.62, INSS_MONTHLY_RATE_CAP), marginRate: 0.35, maxInstallments: 84 },
+    PUBLIC_SERVANT: { interestRateMonthly: 1.50, marginRate: 0.35, maxInstallments: 84 },
+  };
+
   async evaluate({ request, employer }: EvaluationContext): Promise<Omit<BankEvaluationResult, 'responseTimeMs'>> {
-    if (request.employerCnpj.endsWith('99')) {
+    // Test trigger: CNPJ (CLT/servidor) or NB (INSS) ending in "99" simulates a slow core banking system.
+    if (getLinkIdentifier(request).endsWith('99')) {
       await new Promise((resolve) => setTimeout(resolve, 3500));
     } else {
       await new Promise((resolve) => setTimeout(resolve, 300 + Math.random() * 400));
@@ -20,22 +32,41 @@ export class BancoGamaProvider implements BankProvider {
       throw new Error('HTTP 503 Service Unavailable - Core bancário em manutenção');
     }
 
+    const policy = this.policies[request.profile];
+    if (!policy) {
+      return {
+        bankId: this.bankId,
+        bankName: this.bankName,
+        status: 'REJECTED',
+        reason: `Convênio indisponível para o perfil ${PROFILE_LABELS[request.profile]}.`,
+      };
+    }
+
     if (!employer.isActive) {
       return {
         bankId: this.bankId,
         bankName: this.bankName,
         status: 'REJECTED',
-        reason: `Empresa empregadora não habilitada (${employer.statusDescription}).`,
+        reason: `${employer.kind === 'PUBLIC_AGENCY' ? 'Órgão público não habilitado' : 'Empresa empregadora não habilitada'} (${employer.statusDescription}).`,
       };
     }
 
-    const interestRateMonthly = 1.60;
+    if (request.installments > policy.maxInstallments) {
+      return {
+        bankId: this.bankId,
+        bankName: this.bankName,
+        status: 'REJECTED',
+        reason: `Prazo máximo para ${PROFILE_LABELS[request.profile]} é de ${policy.maxInstallments} parcelas.`,
+      };
+    }
+
+    const { interestRateMonthly } = policy;
     const installmentValue = calculatePriceInstallment(
       request.requestedAmount,
       interestRateMonthly,
       request.installments
     );
-    const maxMargin = Number((request.monthlyIncome * 0.35).toFixed(2));
+    const maxMargin = Number((request.monthlyIncome * policy.marginRate).toFixed(2));
 
     if (installmentValue > maxMargin) {
       const suggestedMaxAmount = calculateMaxLoanAmount(maxMargin, interestRateMonthly, request.installments);
@@ -46,7 +77,7 @@ export class BancoGamaProvider implements BankProvider {
         interestRateMonthly,
         installmentValue,
         suggestedMaxAmount,
-        reason: `Parcela calculada (R$ ${installmentValue.toFixed(2)}) supera a margem de 35% (R$ ${maxMargin.toFixed(2)}). Contraproposta disponível: até R$ ${suggestedMaxAmount.toLocaleString('pt-BR')} em ${request.installments}x.`,
+        reason: `Parcela calculada (R$ ${installmentValue.toFixed(2)}) supera a margem de ${formatPercent(policy.marginRate)} (R$ ${maxMargin.toFixed(2)}). Contraproposta disponível: até R$ ${suggestedMaxAmount.toLocaleString('pt-BR')} em ${request.installments}x.`,
       };
     }
 

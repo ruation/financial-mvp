@@ -18,7 +18,7 @@ export class SimulationService {
   ) {}
 
   async executeSimulation(request: SimulationRequest): Promise<ConsolidatedSimulationResponse> {
-    const employer = await this.employerService.getEmployerInfo(request.employerCnpj);
+    const employer = await this.employerService.resolvePayingSource(request);
     const context: EvaluationContext = { request, employer };
 
     const evaluations = await Promise.all(
@@ -49,6 +49,7 @@ export class SimulationService {
       timestamp: new Date().toISOString(),
       applicant: {
         name: request.name,
+        profile: request.profile,
         maskedCpf: this.maskCpf(request.cpf),
         monthlyIncome: request.monthlyIncome,
         maxConsignableMargin: Number((request.monthlyIncome * 0.35).toFixed(2)),

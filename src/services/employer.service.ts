@@ -1,4 +1,4 @@
-import { EmployerInfo } from '../domain/types';
+import { EmployerInfo, PayingSourceKind, SimulationRequest } from '../domain/types';
 
 interface BrasilApiCnpjResponse {
   cnpj: string;
@@ -7,11 +7,33 @@ interface BrasilApiCnpjResponse {
   descricao_situacao_cadastral: string;
 }
 
+type CnpjSourceKind = Exclude<PayingSourceKind, 'SOCIAL_SECURITY'>;
+
+/** Real CNPJ of INSS (Instituto Nacional do Seguro Social), the paying source for retirees/pensioners. */
+const INSS_CNPJ = '29979036000140';
+
 export class EmployerService {
   private readonly API_URL = 'https://brasilapi.com.br/api/cnpj/v1';
   private readonly TIMEOUT_MS = 3000;
 
-  async getEmployerInfo(cnpj: string): Promise<EmployerInfo> {
+  /**
+   * Resolves who pays the applicant (and therefore who must authorize the payroll deduction):
+   * - INSS: predefined social security entity, no network call needed.
+   * - CLT / Public servant: employer/agency CNPJ checked on BrasilAPI (with fallback).
+   */
+  async resolvePayingSource(request: SimulationRequest): Promise<EmployerInfo> {
+    switch (request.profile) {
+      case 'INSS':
+        return this.buildInssPayingSource();
+      case 'PUBLIC_SERVANT':
+        return this.getEmployerInfo(request.employerCnpj, 'PUBLIC_AGENCY');
+      case 'CLT':
+      default:
+        return this.getEmployerInfo(request.employerCnpj, 'PRIVATE_COMPANY');
+    }
+  }
+
+  async getEmployerInfo(cnpj: string, kind: CnpjSourceKind = 'PRIVATE_COMPANY'): Promise<EmployerInfo> {
     try {
       const response = await fetch(`${this.API_URL}/${cnpj}`, {
         method: 'GET',
@@ -35,6 +57,7 @@ export class EmployerService {
         isActive: status === 'ATIVA',
         statusDescription: status,
         source: 'BRASIL_API',
+        kind,
       };
     } catch (error) {
       console.warn(
@@ -42,21 +65,39 @@ export class EmployerService {
           error instanceof Error ? error.message : 'Erro desconhecido'
         }`
       );
-      return this.buildFallbackEmployer(cnpj);
+      return this.buildFallbackEmployer(cnpj, kind);
     }
   }
 
-  private buildFallbackEmployer(cnpj: string): EmployerInfo {
+  private buildInssPayingSource(): EmployerInfo {
+    return {
+      cnpj: INSS_CNPJ,
+      companyName: 'INSS – Instituto Nacional do Seguro Social',
+      isActive: true,
+      statusDescription: 'CONVÊNIO ATIVO (Previdência Social)',
+      source: 'INSS_REGISTRY',
+      kind: 'SOCIAL_SECURITY',
+    };
+  }
+
+  private buildFallbackEmployer(cnpj: string, kind: CnpjSourceKind): EmployerInfo {
     const isSimulatedInactive = cnpj.endsWith('00');
+    const isPublicAgency = kind === 'PUBLIC_AGENCY';
+
+    const activeName = isPublicAgency
+      ? 'Órgão Público Simulado (Contingência)'
+      : 'Empresa Parceira Simulada S.A. (Contingência)';
+    const inactiveName = isPublicAgency
+      ? 'Órgão Público Simulado Extinto (Contingência)'
+      : 'Empresa Simulada Baixada LTDA (Contingência)';
 
     return {
       cnpj,
-      companyName: isSimulatedInactive
-        ? 'Empresa Simulada Baixada LTDA (Contingência)'
-        : 'Empresa Parceira Simulada S.A. (Contingência)',
+      companyName: isSimulatedInactive ? inactiveName : activeName,
       isActive: !isSimulatedInactive,
       statusDescription: isSimulatedInactive ? 'BAIXADA (Simulado)' : 'ATIVA (Contingência)',
       source: 'FALLBACK',
+      kind,
     };
   }
 }
