@@ -102,17 +102,22 @@ Cada perfil já carrega valores padrão válidos e exibe seus próprios gatilhos
 
 ### 🗓️ Melhorias PLANEJADAS (Ordem de Prioridade para a "Próxima Semana")
 
-#### Prioridade 1: Processamento Assíncrono com Filas e Server-Sent Events (SSE)
+#### Prioridade 1: Persistência em PostgreSQL e Telemetria de Decisão do Cliente (Análise de Funil)
+1. **Problema:** Como o MVP opera em memória (*stateless*), cada simulação é perdida após a resposta HTTP. Sem histórico, a operação fica no escuro sobre o comportamento do usuário: não é possível medir em qual etapa o cliente desiste, nem entender quais variáveis do cenário (taxa de juros, prazo, indisponibilidade de um banco ou exibição de contraproposta) fizeram o cliente tomar a decisão **X** (ex.: aceitar um valor menor no Banco Alfa) em vez da **Y** (ex.: abandonar a simulação ou tentar outro prazo).
+2. **Proposta:** Modelar um banco de dados relacional em **PostgreSQL** estruturado em três entidades principais: `simulations` (perfil, salário, valor solicitado e fonte pagadora), `simulation_offers` (status `APPROVED`/`REJECTED`/`UNAVAILABLE`, taxas e `suggestedMaxAmount` de cada banco) e `decision_events` (eventos de interação: qual oferta o cliente selecionou, se ajustou os parâmetros após uma reprovação ou em qual ponto fechou a página). A partir disso, estruturar consultas SQL analíticas para cruzar os cenários de oferta com a ação final do usuário.
+3. **Por quê:** Transforma dados brutos em inteligência comercial. Para o **produto e engenharia**, permite descobrir exatamente em que ponto o cliente desiste e por quê (ex.: identificar que clientes CLT desistem quando o retorno tem mais de um banco `UNAVAILABLE`, ou que 70% aceitam a contraproposta quando a diferença para o valor pedido é menor que 15%). Para o **time de vendas (CRM) e agentes de IA no WhatsApp**, fornece o contexto exato para saber a hora certa de explicar uma regra de margem, insistir em uma contraproposta viável ou passar a conversa para um vendedor humano fechar o contrato.
+
+#### Prioridade 2: Processamento Assíncrono com Filas e Server-Sent Events (SSE)
 1. **Problema:** Esteiras reais de crédito consignado frequentemente levam de 10 a 40 segundos para consultar sistemas de folha de pagamento e bureaus de crédito, tornando inviável segurar uma conexão HTTP síncrona aberta.
 2. **Proposta:** Desacoplar a rota `POST /api/simulations` para retornar `HTTP 202 Accepted` com um `simulationId`, processar cada banco em background via fila (BullMQ + Redis) e transmitir o resultado individual de cada instituição para o front-end em tempo real via **Server-Sent Events (SSE)** assim que ficar pronto.
 3. **Por quê:** O **cliente** visualiza imediatamente os bancos mais rápidos na tela enquanto os bancos legados continuam processando sem risco de *Gateway Timeout*, aumentando o número de propostas entregues.
 
-#### Prioridade 2: Padrão Circuit Breaker por Provedor Bancário
+#### Prioridade 3: Padrão Circuit Breaker por Provedor Bancário
 1. **Problema:** Se a API de um banco parceiro cair por 2 horas, continuar enviando requisições que aguardarão 2 segundos de timeout em todas as simulações desperdiça threads/conexões da nossa infraestrutura e atrasa a resposta para o usuário.
 2. **Proposta:** Implementar um **Circuit Breaker** (ex: biblioteca `opossum`) em torno de cada `BankProvider`. Após 5 falhas consecutivas, o circuito abre por 60 segundos e retorna `UNAVAILABLE` em `0ms` sem realizar chamada de rede, testando a recuperação gradualmente no estado *Half-Open*.
 3. **Por quê:** Protege a **infraestrutura** da empresa contra efeito cascata, reduz drasticamente o tempo de resposta durante incidentes em terceiros e evita bloqueios por *rate-limiting* nos bancos parceiros.
 
-#### Prioridade 3: Idempotência e Cache de Simulações Recentes (Redis TTL)
+#### Prioridade 4: Idempotência e Cache de Simulações Recentes (Redis TTL)
 1. **Problema:** Clientes costumam clicar repetidas vezes no botão de simulação ou recarregar a página, gerando chamadas duplicadas e custos desnecessários de consumo de APIs externas.
 2. **Proposta:** Criar uma chave de idempotência baseada no hash dos parâmetros da simulação (`SHA-256(cpf + cnpj + salario + valor + parcelas)`) e armazenar o resultado consolidado em cache com TTL de 10 minutos.
 3. **Por quê:** Reduz custos operacionais de infraestrutura, evita sobrecarga nos bancos parceiros e entrega respostas instantâneas (`< 10ms`) em consultas repetidas pelo mesmo cliente.
