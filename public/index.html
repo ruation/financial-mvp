@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>OctaConsig | Simulador de Empréstimo Consignado</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen">
+  <header class="bg-indigo-950 text-white py-5 shadow-md">
+    <div class="max-w-6xl mx-auto px-4 flex justify-between items-center">
+      <div>
+        <h1 class="text-2xl font-bold tracking-tight">OctaConsig</h1>
+        <p class="text-indigo-200 text-sm">Motor de Simulação Multi-Bancos de Crédito Consignado</p>
+      </div>
+      <span class="bg-indigo-800 border border-indigo-600 text-xs font-semibold px-3 py-1 rounded-full">
+        MVP · Desafio Técnico
+      </span>
+    </div>
+  </header>
+
+  <main class="max-w-6xl mx-auto px-4 py-8 grid grid-cols-1 lg:grid-cols-12 gap-8">
+    <section class="lg:col-span-5 bg-white p-6 rounded-xl shadow-sm border border-slate-200 h-fit">
+      <h2 class="text-lg font-bold mb-4 text-slate-900">Dados para Simulação</h2>
+      <form id="simForm" class="space-y-4">
+        <div>
+          <label class="block text-xs font-semibold text-slate-600 mb-1">Nome Completo</label>
+          <input type="text" name="name" required value="Ruan Ferreira" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none" />
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-600 mb-1">E-mail</label>
+          <input type="email" name="email" required value="cliente@exemplo.com" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none" />
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-semibold text-slate-600 mb-1">CPF</label>
+            <input type="text" name="cpf" required maxlength="14" value="12345678901" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none" />
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-600 mb-1">CNPJ do Empregador</label>
+            <input type="text" name="employerCnpj" required maxlength="18" value="33000167000101" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none" />
+          </div>
+        </div>
+        <div class="grid grid-cols-3 gap-3">
+          <div>
+            <label class="block text-xs font-semibold text-slate-600 mb-1">Salário (R$)</label>
+            <input type="number" name="monthlyIncome" required step="0.01" value="3500" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none" />
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-600 mb-1">Valor (R$)</label>
+            <input type="number" name="requestedAmount" required step="100" value="12000" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none" />
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-600 mb-1">Parcelas (6-84)</label>
+            <input type="number" name="installments" required min="6" max="84" value="48" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none" />
+          </div>
+        </div>
+
+        <div class="bg-slate-100 p-3.5 rounded-lg text-xs text-slate-600 space-y-1.5 border border-slate-200">
+          <p class="font-bold text-slate-800">Gatilhos para Testar Cenários:</p>
+          <p>• <strong>CNPJ Real (BrasilAPI):</strong> <code>33000167000101</code> (Petrobras) consulta a Receita Federal ao vivo.</p>
+          <p>• <strong>Contraproposta Inteligente:</strong> Digite Valor <code>45000</code> para ver o cálculo reverso de teto por banco.</p>
+          <p>• <strong>CNPJ final 00:</strong> <code>12345678000100</code> simula empresa BAIXADA via Fallback.</p>
+          <p>• <strong>CNPJ final 99:</strong> <code>12345678000199</code> simula Timeout (&gt;2s) no Gama Digital Bank.</p>
+          <p>• <strong>CPF final 0:</strong> <code>12345678910</code> simula queda (Erro 503) no Gama Digital Bank.</p>
+        </div>
+
+        <button type="submit" id="submitBtn" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2.5 rounded-lg transition text-sm shadow-sm">
+          Simular Empréstimo Consignado
+        </button>
+      </form>
+    </section>
+
+    <section class="lg:col-span-7 space-y-4">
+      <div id="emptyState" class="bg-white border border-dashed border-slate-300 rounded-xl p-12 text-center text-slate-500">
+        Preencha os parâmetros e clique em <strong>Simular Empréstimo Consignado</strong> para consultar a BrasilAPI e os bancos parceiros simultaneamente.
+      </div>
+
+      <div id="errorAlert" class="hidden bg-rose-50 border border-rose-200 text-rose-700 p-4 rounded-xl text-sm font-medium"></div>
+
+      <div id="resultsContainer" class="hidden space-y-4">
+        <div id="employerCard" class="bg-white border border-slate-200 p-4 rounded-xl shadow-sm flex justify-between items-center"></div>
+        <div id="summaryCard" class="bg-indigo-50 border border-indigo-100 p-4 rounded-xl flex justify-between items-center"></div>
+        <div id="banksList" class="space-y-3"></div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const form = document.getElementById('simForm');
+    const submitBtn = document.getElementById('submitBtn');
+    const emptyState = document.getElementById('emptyState');
+    const resultsContainer = document.getElementById('resultsContainer');
+    const employerCard = document.getElementById('employerCard');
+    const summaryCard = document.getElementById('summaryCard');
+    const banksList = document.getElementById('banksList');
+    const errorAlert = document.getElementById('errorAlert');
+
+    const formatBRL = (val) =>
+      new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      errorAlert.classList.add('hidden');
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Consultando BrasilAPI e Bancos...';
+
+      const formData = new FormData(form);
+      const payload = Object.fromEntries(formData.entries());
+
+      try {
+        const res = await fetch('/api/simulations', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        const data = await res.json();
+
+        if (!res.ok) {
+          const msg = data.details ? data.details.map((d) => d.message).join(' | ') : data.error;
+          throw new Error(msg);
+        }
+
+        emptyState.classList.add('hidden');
+        resultsContainer.classList.remove('hidden');
+
+        const empStatusBadge = data.employer.isActive
+          ? '<span class="bg-emerald-100 text-emerald-800 text-xs font-bold px-2.5 py-0.5 rounded-full">ATIVA</span>'
+          : '<span class="bg-rose-100 text-rose-800 text-xs font-bold px-2.5 py-0.5 rounded-full">INATIVA / BAIXADA</span>';
+
+        employerCard.innerHTML = `
+          <div>
+            <p class="text-[11px] text-slate-400 font-semibold uppercase">Empregador Verificado (${data.employer.source})</p>
+            <p class="text-sm font-bold text-slate-800">${data.employer.companyName}</p>
+            <p class="text-xs text-slate-500">CNPJ: ${data.employer.cnpj}</p>
+          </div>
+          <div class="text-right">
+            ${empStatusBadge}
+            <p class="text-[11px] text-slate-400 mt-1">${data.employer.statusDescription}</p>
+          </div>
+        `;
+
+        summaryCard.innerHTML = `
+          <div>
+            <p class="text-xs text-indigo-700 font-semibold uppercase">Margem Consignável Legal (35%)</p>
+            <p class="text-xl font-bold text-indigo-950">${formatBRL(data.applicant.maxConsignableMargin)} / mês</p>
+          </div>
+          <div class="text-right text-xs text-slate-600">
+            <p>Proponente: <strong>${data.applicant.name}</strong></p>
+            <p>CPF: ${data.applicant.maskedCpf}</p>
+          </div>
+        `;
+
+        banksList.innerHTML = data.evaluations
+          .map((bank, idx) => {
+            const badge = {
+              APPROVED:
+                '<span class="bg-emerald-100 text-emerald-800 text-xs font-semibold px-2.5 py-1 rounded-full">Aprovado</span>',
+              REJECTED:
+                '<span class="bg-rose-100 text-rose-800 text-xs font-semibold px-2.5 py-1 rounded-full">Reprovado</span>',
+              UNAVAILABLE:
+                '<span class="bg-amber-100 text-amber-800 text-xs font-semibold px-2.5 py-1 rounded-full">Indisponível</span>',
+            }[bank.status];
+
+            const bestTag =
+              idx === 0 && bank.status === 'APPROVED'
+                ? '<span class="ml-2 bg-indigo-600 text-white text-[10px] uppercase font-bold px-2 py-0.5 rounded">Melhor Taxa</span>'
+                : '';
+
+            let detailsHtml = '';
+            if (bank.status === 'APPROVED') {
+              detailsHtml = `
+                <div class="grid grid-cols-3 gap-2 mt-3 pt-3 border-t border-slate-100 text-sm">
+                  <div><span class="text-xs text-slate-500 block">Parcela Mensal</span><strong class="text-slate-900">${formatBRL(bank.installmentValue)}</strong></div>
+                  <div><span class="text-xs text-slate-500 block">Taxa de Juros</span><strong class="text-emerald-700">${bank.interestRateMonthly}% a.m.</strong></div>
+                  <div><span class="text-xs text-slate-500 block">Total Final</span><strong class="text-slate-700">${formatBRL(bank.totalAmount)}</strong></div>
+                </div>`;
+            } else {
+              const counterOfferBadge = bank.suggestedMaxAmount
+                ? `<div class="mt-2 bg-indigo-50 border border-indigo-200 text-indigo-900 p-2 rounded-lg text-xs">
+                     💡 <strong>Contraproposta pré-aprovada:</strong> Solicite até <strong>${formatBRL(bank.suggestedMaxAmount)}</strong> (Taxa: ${bank.interestRateMonthly}% a.m.) para aprovação imediata neste banco.
+                   </div>`
+                : '';
+              detailsHtml = `
+                <p class="mt-2 text-xs text-slate-600 bg-slate-50 p-2.5 rounded-lg border border-slate-200">${bank.reason}</p>
+                ${counterOfferBadge}
+              `;
+            }
+
+            return `
+              <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
+                <div class="flex justify-between items-center">
+                  <div>
+                    <h3 class="font-bold text-slate-900 inline">${bank.bankName}</h3>
+                    ${bestTag}
+                    <span class="block text-[11px] text-slate-400">Tempo de resposta: ${bank.responseTimeMs}ms</span>
+                  </div>
+                  ${badge}
+                </div>
+                ${detailsHtml}
+              </div>
+            `;
+          })
+          .join('');
+      } catch (err) {
+        errorAlert.textContent = err.message;
+        errorAlert.classList.remove('hidden');
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Simular Empréstimo Consignado';
+      }
+    });
+  </script>
+</body>
+</html>
